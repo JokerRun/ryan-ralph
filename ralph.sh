@@ -91,7 +91,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   if [[ "$TOOL" == "amp" ]]; then
     OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
   elif [[ "$TOOL" == "copilot" ]]; then
-    PROMPT_CONTENT=$(cat "$SCRIPT_DIR/prompt.md")
+    PROMPT_CONTENT=$(cat "$SCRIPT_DIR/AGENTS.md")
     OUTPUT=$(copilot --yolo -p "$PROMPT_CONTENT" 2>&1 | tee /dev/stderr) || true
   else
     # Claude Code: use --dangerously-skip-permissions for autonomous operation, --print for output
