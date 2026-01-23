@@ -39,6 +39,12 @@ PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
 
+echo "SCRIPT_DIR: $SCRIPT_DIR"
+echo "PRD_FILE: $PRD_FILE"
+echo "PROGRESS_FILE: $PROGRESS_FILE"
+echo "ARCHIVE_DIR: $ARCHIVE_DIR"
+echo "LAST_BRANCH_FILE: $LAST_BRANCH_FILE"
+
 # Archive previous run if branch changed
 if [ -f "$PRD_FILE" ] && [ -f "$LAST_BRANCH_FILE" ]; then
   CURRENT_BRANCH=$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null || echo "")
