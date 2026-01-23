@@ -95,7 +95,7 @@ This creates `prd.json` with user stories structured for autonomous execution.
 # Using Claude Code
 ./scripts/ralph/ralph.sh --tool claude [max_iterations]
 
-# Using GitHub Copilot CLI
+# Using GitHub Copilot CLI (uses --yolo to enable all permissions)
 ./scripts/ralph/ralph.sh --tool copilot [max_iterations]
 ```
 
