@@ -12,8 +12,15 @@
    ```
 4. 根据项目情况,可以自行调整`prompt.md`, 如你的项目是制作presentation,则可以微调一下(默认是:You are an autonomous coding agent working on a software project.).
 5. user level 按需调整.
+6. @tasks/prd.json 帮我把这个信息做成walkthrough交互图,我需要看看整体情况.(use walkthrough skill),效果:https://ampcode.com/threads/T-019bf105-2dac-720f-a2b6-f62e76f73baf
+7. GitHub Copilot charge by premium request means you only pay 1 request per iteration. awsome. and you can run [copilot-usage-monitor.sh](copilot-usage-monitor.sh) to see details.
+8. [ralph.sh](ralph.sh) log detail to files so you can archive the processes of the ralph loops.
 
-
+> 1. Amp Opus For PRD.md and prd.json
+> 2. GitHub Copilot for ralph loops
+> 3. monitor for Github Copilot premium request usage
+> 4. Walkthrough for Ralph Progress.
+> ![img.png](amp-for-prd-and-prd.json-.png)
 
 
 ```bash

@@ -39,11 +39,36 @@ PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
 
-echo "SCRIPT_DIR: $SCRIPT_DIR"
-echo "PRD_FILE: $PRD_FILE"
-echo "PROGRESS_FILE: $PROGRESS_FILE"
-echo "ARCHIVE_DIR: $ARCHIVE_DIR"
-echo "LAST_BRANCH_FILE: $LAST_BRANCH_FILE"
+# Log directory (XDG spec)
+LOG_DIR="$HOME/.share/log/ralph"
+mkdir -p "$LOG_DIR"
+
+# Get branch name for log file
+BRANCH_NAME=""
+if [ -f "$PRD_FILE" ]; then
+  BRANCH_NAME=$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null | sed 's|/|_|g' || echo "")
+fi
+if [ -z "$BRANCH_NAME" ]; then
+  BRANCH_NAME="unknown"
+fi
+
+# Log file: YYYY-MM-DD-BRANCH_NAME.log
+LOG_DATE=$(date +%Y-%m-%d)
+LOG_FILE="$LOG_DIR/${LOG_DATE}-${BRANCH_NAME}.log"
+
+# Logging function: output to both console and log file
+log() {
+  echo "$@" | tee -a "$LOG_FILE"
+}
+
+log "SCRIPT_DIR: $SCRIPT_DIR"
+log "PRD_FILE: $PRD_FILE"
+log "PROGRESS_FILE: $PROGRESS_FILE"
+log "ARCHIVE_DIR: $ARCHIVE_DIR"
+log "LAST_BRANCH_FILE: $LAST_BRANCH_FILE"
+log "LOG_FILE: $LOG_FILE"
+log ""
+log "=== Ralph session started at $(date) ==="
 
 # Archive previous run if branch changed
 if [ -f "$PRD_FILE" ] && [ -f "$LAST_BRANCH_FILE" ]; then
@@ -57,11 +82,11 @@ if [ -f "$PRD_FILE" ] && [ -f "$LAST_BRANCH_FILE" ]; then
     FOLDER_NAME=$(echo "$LAST_BRANCH" | sed 's|^ralph/||')
     ARCHIVE_FOLDER="$ARCHIVE_DIR/$DATE-$FOLDER_NAME"
     
-    echo "Archiving previous run: $LAST_BRANCH"
+    log "Archiving previous run: $LAST_BRANCH"
     mkdir -p "$ARCHIVE_FOLDER"
     [ -f "$PRD_FILE" ] && cp "$PRD_FILE" "$ARCHIVE_FOLDER/"
     [ -f "$PROGRESS_FILE" ] && cp "$PROGRESS_FILE" "$ARCHIVE_FOLDER/"
-    echo "   Archived to: $ARCHIVE_FOLDER"
+    log "   Archived to: $ARCHIVE_FOLDER"
     
     # Reset progress file for new run
     echo "# Ralph Progress Log" > "$PROGRESS_FILE"
@@ -85,38 +110,41 @@ if [ ! -f "$PROGRESS_FILE" ]; then
   echo "---" >> "$PROGRESS_FILE"
 fi
 
-echo "Starting Ralph - Tool: $TOOL - Max iterations: $MAX_ITERATIONS"
+log "Starting Ralph - Tool: $TOOL - Max iterations: $MAX_ITERATIONS"
 
 for i in $(seq 1 $MAX_ITERATIONS); do
-  echo ""
-  echo "==============================================================="
-  echo "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
-  echo "==============================================================="
+  log ""
+  log "==============================================================="
+  log "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
+  log "==============================================================="
 
-  # Run the selected tool with the ralph prompt
+  # Run the selected tool with the ralph prompt (output to console and log)
+  echo "$PWD"
   if [[ "$TOOL" == "amp" ]]; then
-    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee -a "$LOG_FILE" /dev/stderr) || true
   elif [[ "$TOOL" == "copilot" ]]; then
     PROMPT_CONTENT=$(cat "$SCRIPT_DIR/AGENTS.md")
-    OUTPUT=$(copilot --yolo -p "$PROMPT_CONTENT" 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(copilot --yolo -p "$PROMPT_CONTENT" 2>&1 | tee -a "$LOG_FILE" /dev/stderr) || true
   else
     # Claude Code: use --dangerously-skip-permissions for autonomous operation, --print for output
-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee -a "$LOG_FILE" /dev/stderr) || true
   fi
   
   # Check for completion signal
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
-    echo ""
-    echo "Ralph completed all tasks!"
-    echo "Completed at iteration $i of $MAX_ITERATIONS"
+    log ""
+    log "Ralph completed all tasks!"
+    log "Completed at iteration $i of $MAX_ITERATIONS"
+    log "=== Ralph session ended at $(date) ==="
     exit 0
   fi
   
-  echo "Iteration $i complete. Continuing..."
+  log "Iteration $i complete. Continuing..."
   sleep 2
 done
 
-echo ""
-echo "Ralph reached max iterations ($MAX_ITERATIONS) without completing all tasks."
-echo "Check $PROGRESS_FILE for status."
+log ""
+log "Ralph reached max iterations ($MAX_ITERATIONS) without completing all tasks."
+log "Check $PROGRESS_FILE for status."
+log "=== Ralph session ended at $(date) ==="
 exit 1
