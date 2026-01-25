@@ -20,8 +20,9 @@
 > 2. GitHub Copilot for ralph loops
 > 3. monitor for Github Copilot premium request usage
 > 4. Walkthrough for Ralph Progress.
-> ![img.png](amp-for-prd-and-prd.json-.png)
+> ![img.png](flowchart/public/terminal.png)
 
+>![img.png](flowchart/public/console.png)
 
 ```bash
 ➜  usecase git:(main) ✗ tree .
