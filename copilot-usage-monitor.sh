@@ -14,10 +14,13 @@ DAYS=3
 MODEL=""
 WATCH_MODE=false
 INTERVAL=30
+PLAN_QUOTA=1500  # Pro+ plan default; change to 300 (Pro) or 50 (Free) as needed
 LOG_FILE="/Users/rico/research/logs/copilot-usage-monitor.log"
 COLORS_CYAN="\033[1;36m"
 COLORS_GREEN="\033[1;32m"
 COLORS_YELLOW="\033[1;33m"
+COLORS_RED="\033[1;31m"
+COLORS_MAGENTA="\033[1;35m"
 RESET="\033[0m"
 
 # 确保日志目录存在
@@ -31,6 +34,7 @@ usage() {
 选项:
   -d, --days N       查询近N天的用量 (默认: 3)
   -m, --model NAME   指定监控的模型 (默认: 查所有模型)
+  -q, --quota N      计划配额 (默认: 1500, Pro+)
   -w, --watch        启用监控模式，每30秒刷新一次
   -h, --help         显示帮助信息
 
@@ -55,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -m|--model)
       MODEL="$2"
+      shift 2
+      ;;
+    -q|--quota)
+      PLAN_QUOTA="$2"
       shift 2
       ;;
     -w|--watch)
@@ -87,7 +95,7 @@ log_message() {
 }
 
 display_header() {
-  local msg="========================================\n📊 Copilot Premium Request 用量监控\n用户: $USERNAME | 查询天数: ${DAYS}天"
+  local msg="========================================\n📊 Copilot Premium Request 用量监控\n用户: $USERNAME | 查询天数: ${DAYS}天 | 配额: ${PLAN_QUOTA}"
   if [ -n "$MODEL" ]; then
     msg="$msg | 监控模型: $MODEL"
   fi
@@ -98,10 +106,80 @@ display_header() {
   echo "" | tee -a "$LOG_FILE" > /dev/null
 }
 
+fetch_cycle_summary() {
+  echo -e "${COLORS_MAGENTA}━━━━━━━━━ 当前计费周期 (本月) ━━━━━━━━━${RESET}" | tee -a "$LOG_FILE"
+
+  local cycle_response
+  cycle_response=$(gh api "/users/$USERNAME/settings/billing/premium_request/usage" \
+    -H "X-GitHub-Api-Version: 2022-11-28" 2>/dev/null)
+
+  if [ -z "$cycle_response" ]; then
+    echo "  ⚠️  无法获取本月用量数据" | tee -a "$LOG_FILE"
+    echo -e "${COLORS_MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE" > /dev/null
+    return
+  fi
+
+  local period
+  period=$(echo "$cycle_response" | jq -r '"周期: \(.timePeriod.year)-\(.timePeriod.month)"' 2>/dev/null)
+  echo "  📆 $period" | tee -a "$LOG_FILE"
+
+  local cycle_total
+  cycle_total=$(echo "$cycle_response" | jq '[.usageItems[].grossQuantity // 0] | add // 0 | . * 100 | round / 100' 2>/dev/null)
+  local cycle_amount
+  cycle_amount=$(echo "$cycle_response" | jq '[.usageItems[].grossAmount // 0] | add // 0 | . * 100 | round / 100' 2>/dev/null)
+  local net_amount
+  net_amount=$(echo "$cycle_response" | jq '[.usageItems[].netAmount // 0] | add // 0 | . * 100 | round / 100' 2>/dev/null)
+
+  local remaining
+  remaining=$(echo "$PLAN_QUOTA - $cycle_total" | bc 2>/dev/null)
+  local pct_used
+  pct_used=$(echo "scale=1; $cycle_total * 100 / $PLAN_QUOTA" | bc 2>/dev/null)
+
+  # 进度条 (20格)
+  local bar_len=20
+  local filled=$(echo "$cycle_total * $bar_len / $PLAN_QUOTA" | bc 2>/dev/null)
+  [ "$filled" -gt "$bar_len" ] 2>/dev/null && filled=$bar_len
+  local empty=$((bar_len - filled))
+  local bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null) 2>/dev/null)
+  bar="${bar}$(printf '░%.0s' $(seq 1 $empty 2>/dev/null) 2>/dev/null)"
+
+  # 颜色: <60% 绿, 60-85% 黄, >85% 红
+  local bar_color="$COLORS_GREEN"
+  local pct_int=${pct_used%.*}
+  [ "$pct_int" -ge 60 ] 2>/dev/null && bar_color="$COLORS_YELLOW"
+  [ "$pct_int" -ge 85 ] 2>/dev/null && bar_color="$COLORS_RED"
+
+  echo -e "  ${bar_color}[${bar}] ${pct_used}%${RESET}" | tee -a "$LOG_FILE"
+  echo -e "  已用: ${cycle_total}/${PLAN_QUOTA} | 剩余: ${remaining} | 💰 \$${cycle_amount}" | tee -a "$LOG_FILE"
+
+  if [ "$(echo "$net_amount > 0" | bc 2>/dev/null)" = "1" ]; then
+    echo -e "  ${COLORS_RED}⚠️  超额费用: \$${net_amount}${RESET}" | tee -a "$LOG_FILE"
+  fi
+
+  # 本月各模型明细
+  local model_count
+  model_count=$(echo "$cycle_response" | jq '.usageItems | length' 2>/dev/null)
+  if [ "$model_count" -gt 0 ]; then
+    echo "" | tee -a "$LOG_FILE" > /dev/null
+    echo "  模型明细:" | tee -a "$LOG_FILE"
+    echo "$cycle_response" | jq -r '.usageItems | sort_by(-.grossQuantity)[] | "  \(.model): \(.grossQuantity) reqs (\(.grossAmount | tostring | if test("\\.") then . else . + ".00" end)$)"' 2>/dev/null | \
+    while read -r line; do
+      echo -e "    🔹${line}" | tee -a "$LOG_FILE"
+    done
+  fi
+
+  echo -e "${COLORS_MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE" > /dev/null
+}
+
 fetch_usage() {
   local timestamp="⏱️  $(date '+%Y-%m-%d %H:%M:%S')"
   echo "$timestamp - 正在查询..." | tee -a "$LOG_FILE"
   echo "" | tee -a "$LOG_FILE" > /dev/null
+
+  # 先显示当前计费周期整体用量
+  fetch_cycle_summary
   
   local total_requests=0
   local total_amount=0
