@@ -10,7 +10,7 @@
 #   ./copilot-usage-monitor.sh -d 7 -m "Claude Sonnet 4.5" -w
 
 USERNAME=$(gh api /user --jq '.login' 2>/dev/null)
-DAYS=3
+DAYS=0
 MODEL=""
 WATCH_MODE=false
 INTERVAL=30
@@ -32,7 +32,7 @@ usage() {
 用法: $0 [选项]
 
 选项:
-  -d, --days N       查询近N天的用量 (默认: 3)
+  -d, --days N       查询近N天的用量 (默认: 0, 仅显示本月汇总)
   -m, --model NAME   指定监控的模型 (默认: 查所有模型)
   -q, --quota N      计划配额 (默认: 1500, Pro+)
   -w, --watch        启用监控模式，每30秒刷新一次
@@ -95,7 +95,11 @@ log_message() {
 }
 
 display_header() {
-  local msg="========================================\n📊 Copilot Premium Request 用量监控\n用户: $USERNAME | 查询天数: ${DAYS}天 | 配额: ${PLAN_QUOTA}"
+  local days_info=""
+  if [ "$DAYS" -gt 0 ]; then
+    days_info=" | 查询天数: ${DAYS}天"
+  fi
+  local msg="========================================\n📊 Copilot Premium Request 用量监控\n用户: $USERNAME | 配额: ${PLAN_QUOTA}${days_info}"
   if [ -n "$MODEL" ]; then
     msg="$msg | 监控模型: $MODEL"
   fi
@@ -180,6 +184,13 @@ fetch_usage() {
 
   # 先显示当前计费周期整体用量
   fetch_cycle_summary
+
+  # DAYS=0 时只显示周期汇总，跳过每日明细
+  if [ "$DAYS" -le 0 ]; then
+    echo "📝 日志已保存: $LOG_FILE" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE" > /dev/null
+    return
+  fi
   
   local total_requests=0
   local total_amount=0
